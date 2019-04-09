@@ -1,0 +1,161 @@
+---
+title: "Musser-Grace-ADA-DATA-REANALYSIS-ASSIGNMENT"
+author: "Grace Musser"
+date: "4/2/2019"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = TRUE,
+	message = TRUE,
+	comment = "##",
+	prompt = FALSE,
+	tidy = TRUE,
+	tidy.opts = list(blank = FALSE, width.cutoff = 75),
+	fig.path = "img/",
+	fig.align = "center"
+)
+```
+
+##Introduction
+This paper uses novel endocast data, data from previously published phylogenetic analsyes, and ancestral state reconstruction to assess vision capacity in paleognathous birds and hypothesize their habitat types (eg open, forested). It is clear that the authors at least used the ape and phytools packages in R. They performed ANOVA tests, used PGLS (phylogenetic least squares regression), and tree visualization and ancestral state reconstruction to attain their results. The authors provided trees and measurements but did not provide R code.
+
+```{r}
+#First, I loaded in the following packages:
+library(ctv) 
+library(phytools)
+library(ape)
+library(nlme)
+library(geiger)
+```
+
+```{r}
+#Load in the trees, which are in Newick notation, into tree files which are class "phylo".
+tree_2 <- read.tree("rspb20181540supp2.txt")
+tree_3 <- read.tree("rspb20181540supp3.txt")
+tree_4 <- read.tree("rspb20181540supp4.txt")
+tree_5 <- read.tree("rspb20181540supp5.txt")
+```
+
+
+```{r}
+#Here, the brain measurements are read in from a .csv file. There are header and row names.
+brain_meas<-read.csv("TableS2.csv",header=TRUE,row.names=1)
+head(brain_meas)
+```
+
+
+```{r}
+#The authors based stats and visualiztions on tree 4, so we will focus on reanalysis  of this tree.
+#First, we need to check that the names in the csv file and the names in the tree match. They did not at first, so names had to be deleted.
+obj<-name.check(tree_4,brain_meas) #check name matching across tree and table
+obj
+```
+
+```{r}
+#We pruned names in the tree that did not match those in the dataframe.
+pruned<-drop.tip(tree_4, obj$tree_not_data) #prune tips that do not match data
+pruned
+```
+```{r}
+#When rechecking the names, we can see that they now match.
+name.check(pruned, brain_meas) #double check again that all names match across data and tree
+```
+
+PGLS using ape:
+
+First, simple model using Brownian motion:
+```{r}
+bm<-corBrownian(1, pruned) #define covariance structure (Brownian motion)
+bm
+```
+
+```{r}
+modelo1<-gls(OBL~CHL, data=brain_meas, correlation=bm) #OBL=olfactory bulb length, CHL=cerebral hemisphere length
+#olfactory bulb ratio=olfactory bulb length to cerebral hemisphere length
+summary(modelo1) #get the summary of the PGLS
+```
+
+Relaxed Brownian motion model (Lambda model of Pagel):
+
+```{r}
+modelo2<-gls(OBL~CHL, data=brain_meas, correlation=corPagel(1,pruned))
+summary(modelo2) #this model is more complex and based on that of Pagel
+```
+
+```{r}
+plot(modelo2) #plot the PGLS--additionaledits performed in photoshop by authors
+```
+
+
+Multiple regression PGLS:
+
+```{r}
+modelo3<-gls(OBL~CHL+OR, data=brain_meas, correlation=corPagel(1,pruned))
+summary(modelo3) #this is a pagel model which takes olfactory ratio into account when comparing olfactory bulb length and cerebral hemisphere length
+```
+
+
+```{r}
+#One can use ace to find anova scores and CI of internal nodes in ape:
+ace(brain_meas$Olfactory.Ratio, pruned, method = "GLS",
+        corStruct = corBrownian(1, pruned), CI=TRUE)
+```
+
+```{r}
+anova(modelo2) #perform an ANOVA on the second model
+```
+
+#The authors did not provide their scorings for habitat type. If I were to perform an ANOVA taking habitat type into account, I would score each taxon as having a habitat type of forest dwelling (=1) or open (=0).
+
+```{r}
+anova(modelo3) #perform an ANOVA on the third model
+```
+
+```{r}
+#There are many ways to visualize trees using these packages. Here, we try the fan tree:
+plotTree(pruned,type="fan",color="blue", ftype="i") #plot tree in fan style
+```
+```{r}
+#before performing ancestral state reconstruction, we need to make syre that our data is vectorized
+svl<-as.matrix(brain_meas$Olfactory.Ratio)[,1] #turn olfactory ratio column into matrix
+fit<-fastAnc(pruned,svl,vars=TRUE,CI=TRUE) #ancestral state reconstructions per node, confidence intervals
+fit
+```
+```{r}
+#again, we vectorize data....
+svl2<-as.matrix(brain_meas)[,8]
+fit<-fastAnc(pruned,svl2,vars=TRUE,CI=TRUE) #and perform ancestral state reconstruction
+fit
+```
+
+
+```{r}
+#the contMap function allows us to visualize the tree with ancestral state reconstructions mapped using colors
+obj<-contMap(pruned, svl2, legend=0.7*max(nodeHeights(pruned)),
+    fsize=c(0.7,0.9))
+```
+```{r}
+#for a fan shape:
+plot(obj,type="fan", legend=0.7*max(nodeHeights(pruned)),
+    fsize=c(0.7,0.9))
+```
+
+
+```{r}
+#another ancestral state reconstruction
+svl2<-as.matrix(brain_meas)[,8]
+fit<-fastAnc(pruned,svl2,vars=TRUE,CI=TRUE)
+fit
+```
+
+Overall, our results are close to those of the original paper. Habitat scorings are needed to verify some of their ANOVA scores. Additional edits to the ancestral state reconstruction-tree figure were performed by the authors in photoshop, and that is not replicated here.
+
+<img src="TreeFig.png" width="300px"/>
+
+##References
+
+Torres, Christopher R., and J. A. Clarke. Nocturnal giants: evolution of the sensory ecology in elephant birds and other palaeognaths inferred from digital brain reconstructions. Proc. Royal Society B 285: 20181540. http://dx.doi.org/10.1098/rspb.2018.1540.
+
+
